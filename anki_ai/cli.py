@@ -70,6 +70,14 @@ def auth_login() -> None:
 # ---------------------------------------------------------------------------
 
 
+@cli.command("skill")
+def skill_cmd() -> None:
+    """Print the path to the installed Claude skill file."""
+    from importlib.resources import files
+
+    print(files("anki_ai") / "skill" / "anki.md")
+
+
 @cli.command("sync")
 def sync_cmd(
     media: Annotated[bool, typer.Option("--media/--no-media")] = True,

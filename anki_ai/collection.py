@@ -46,6 +46,7 @@ def get_collection_path() -> str:
 @contextmanager
 def open_collection(path: str | None = None) -> Generator[Collection, None, None]:
     col_path = path or get_collection_path()
+    Path(col_path).parent.mkdir(parents=True, exist_ok=True)
     col = Collection(col_path)
     try:
         yield col
