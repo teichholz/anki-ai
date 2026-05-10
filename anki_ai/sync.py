@@ -30,11 +30,14 @@ def save_hkey(hkey: str) -> None:
 
 
 def run_sync(
-    col: Collection, sync_media: bool = False, upload: bool = False
+    col: Collection, sync_media: bool = True, upload: bool = False
 ) -> SyncCollectionResponse:
     hkey = load_hkey()
     auth = SyncAuth(hkey=hkey, endpoint=None)
-    output = col.sync_collection(auth, sync_media=sync_media)
+
+    # Always sync collection without media — full_upload_or_download conflicts
+    # with an in-progress media sync if sync_media=True is passed here.
+    output = col.sync_collection(auth, sync_media=False)
 
     required = output.required
 
@@ -53,5 +56,9 @@ def run_sync(
         typer.echo(f"Full {direction} complete.")
     else:
         typer.echo(f"Sync returned unexpected status: {required}", err=True)
+
+    if sync_media:
+        col.sync_media(auth)
+        typer.echo("Media sync complete.")
 
     return output
