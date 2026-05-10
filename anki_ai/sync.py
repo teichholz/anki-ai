@@ -35,10 +35,9 @@ def run_sync(
     hkey = load_hkey()
     auth = SyncAuth(hkey=hkey, endpoint=None)
 
-    # Always sync collection without media — full_upload_or_download conflicts
-    # with an in-progress media sync if sync_media=True is passed here.
+    # Collection sync without media: passing sync_media=True here and then
+    # calling full_upload_or_download causes an HTTP 400 on AnkiWeb.
     output = col.sync_collection(auth, sync_media=False)
-
     required = output.required
 
     if required == _CR.NO_CHANGES:
@@ -56,9 +55,13 @@ def run_sync(
         typer.echo(f"Full {direction} complete.")
     else:
         typer.echo(f"Sync returned unexpected status: {required}", err=True)
+        return output
 
     if sync_media:
-        col.sync_media(auth)
+        # sync_media() standalone panics — media state is only initialized via
+        # sync_collection. This second call is a fast NO_CHANGES for the
+        # collection and correctly runs the media sync.
+        col.sync_collection(auth, sync_media=True)
         typer.echo("Media sync complete.")
 
     return output
