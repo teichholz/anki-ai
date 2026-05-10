@@ -40,6 +40,10 @@ def run_sync(
     output = col.sync_collection(auth, sync_media=False)
     required = output.required
 
+    # AnkiWeb may redirect to a different shard; subsequent calls must use it.
+    if output.new_endpoint:
+        auth = SyncAuth(hkey=auth.hkey, endpoint=output.new_endpoint)
+
     if required == _CR.NO_CHANGES:
         typer.echo("Already up to date.")
     elif required == _CR.NORMAL_SYNC:
