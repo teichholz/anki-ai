@@ -170,6 +170,65 @@ anki-ai notes search ""
 
 ---
 
+### `anki-ai snapshot`
+
+Create a timestamped snapshot of the collection file before making bulk changes.
+Snapshots are stored in `~/.local/share/Anki2/<profile>/snapshots/`.
+
+**Output shape:**
+```json
+{ "snapshot": "/home/user/.local/share/Anki2/User 1/snapshots/snapshot-2026-05-10-19.18.36.anki2" }
+```
+
+```bash
+anki-ai snapshot
+# {"snapshot": "...snapshots/snapshot-2026-05-10-19.18.36.anki2"}
+```
+
+---
+
+### `anki-ai snapshots`
+
+List all available snapshots (newest first).
+
+**Output shape:**
+```json
+[
+  {
+    "name": "snapshot-2026-05-10-19.18.36.anki2",
+    "path": "/home/user/.local/share/Anki2/User 1/snapshots/snapshot-2026-05-10-19.18.36.anki2",
+    "bytes": 10117120
+  }
+]
+```
+
+```bash
+anki-ai snapshots
+```
+
+---
+
+### `anki-ai restore SNAPSHOT`
+
+Restore the collection from a snapshot, overwriting the current state. Prompts for confirmation unless `--yes` / `-y` is passed.
+
+**Argument:** bare filename (e.g. `snapshot-2026-05-10-19.18.36.anki2`) or full path.
+
+```bash
+anki-ai restore snapshot-2026-05-10-19.18.36.anki2
+anki-ai restore snapshot-2026-05-10-19.18.36.anki2 --yes
+```
+
+**Rollback workflow (agent safety):**
+```bash
+anki-ai snapshot                          # before the agent session
+# ... agent makes changes ...
+anki-ai snapshots                         # find the snapshot name
+anki-ai restore snapshot-<timestamp>.anki2 --yes
+```
+
+---
+
 ### `anki-ai media upload FILE [FILE ...]`
 
 Copy one or more local files into the collection's media folder (`collection.media/`).

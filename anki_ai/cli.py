@@ -4,8 +4,9 @@ from typing import Annotated
 
 import typer
 
+from anki_ai.backup import create_snapshot, list_snapshots, restore_snapshot
 from anki_ai.cards import find_cards, get_card_info, suspend_cards, unsuspend_cards
-from anki_ai.collection import open_collection
+from anki_ai.collection import get_collection_path, open_collection
 from anki_ai.decks import create_deck, delete_deck, list_decks
 from anki_ai.media import add_media_file
 from anki_ai.notes import add_note, delete_note, get_note, search_notes, update_note
@@ -93,6 +94,49 @@ def sync_cmd(
         raise
     except Exception as exc:
         _exit_on_error(exc, "Sync failed")
+
+
+# ---------------------------------------------------------------------------
+# snapshot / restore
+# ---------------------------------------------------------------------------
+
+
+@cli.command("snapshot")
+def snapshot_cmd() -> None:
+    """Create a timestamped snapshot of the collection file."""
+    try:
+        path = create_snapshot(get_collection_path())
+        print(json.dumps({"snapshot": path}, ensure_ascii=False))
+    except Exception as exc:
+        _exit_on_error(exc, "Failed to create snapshot")
+
+
+@cli.command("snapshots")
+def snapshots_cmd() -> None:
+    """List available snapshots."""
+    try:
+        snaps = list_snapshots(get_collection_path())
+        print(json.dumps(snaps, ensure_ascii=False, indent=2))
+    except Exception as exc:
+        _exit_on_error(exc, "Failed to list snapshots")
+
+
+@cli.command("restore")
+def restore_cmd(
+    snapshot: Annotated[str, typer.Argument(help="Snapshot filename or full path.")],
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation.")] = False,
+) -> None:
+    """Restore the collection from a snapshot, overwriting the current state."""
+    if not yes:
+        typer.confirm(
+            f"Restore from '{snapshot}'? The current collection will be overwritten.",
+            abort=True,
+        )
+    try:
+        path = restore_snapshot(get_collection_path(), snapshot)
+        typer.echo(f"Restored from '{path}'.")
+    except Exception as exc:
+        _exit_on_error(exc, "Failed to restore snapshot")
 
 
 # ---------------------------------------------------------------------------
