@@ -1,5 +1,11 @@
-from anki.cards import Card, CardId
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from anki.collection import Collection
+
+if TYPE_CHECKING:
+    from anki.cards import Card
 
 _TYPE = {0: "new", 1: "learning", 2: "review", 3: "relearning"}
 _QUEUE = {
@@ -36,14 +42,19 @@ def find_cards(col: Collection, query: str) -> list[dict]:
 
 
 def get_card_info(col: Collection, card_id: int) -> dict:
-    card = col.get_card(CardId(card_id))
-    return _card_to_dict(card)
+    from anki.cards import CardId
+
+    return _card_to_dict(col.get_card(CardId(card_id)))
 
 
 def suspend_cards(col: Collection, card_ids: list[int]) -> int:
+    from anki.cards import CardId
+
     result = col.sched.suspend_cards([CardId(i) for i in card_ids])
     return result.count
 
 
 def unsuspend_cards(col: Collection, card_ids: list[int]) -> None:
+    from anki.cards import CardId
+
     col.sched.unsuspend_cards([CardId(i) for i in card_ids])

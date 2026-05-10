@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -6,6 +7,7 @@ import typer
 from anki_ai.cards import find_cards, get_card_info, suspend_cards, unsuspend_cards
 from anki_ai.collection import open_collection
 from anki_ai.decks import create_deck, delete_deck, list_decks
+from anki_ai.media import add_media_file
 from anki_ai.notes import add_note, delete_note, get_note, search_notes, update_note
 from anki_ai.notetypes import get_notetype_fields, list_notetypes
 from anki_ai.sync import run_sync, save_hkey
@@ -18,6 +20,7 @@ notes_app = typer.Typer(no_args_is_help=True)
 cards_app = typer.Typer(no_args_is_help=True)
 tags_app = typer.Typer(no_args_is_help=True)
 notetypes_app = typer.Typer(no_args_is_help=True)
+media_app = typer.Typer(no_args_is_help=True)
 
 cli.add_typer(auth_app, name="auth", help="Manage AnkiWeb authentication.")
 cli.add_typer(decks_app, name="decks", help="Deck operations.")
@@ -25,6 +28,7 @@ cli.add_typer(notes_app, name="notes", help="Note operations.")
 cli.add_typer(cards_app, name="cards", help="Card operations.")
 cli.add_typer(tags_app, name="tags", help="Tag operations.")
 cli.add_typer(notetypes_app, name="notetypes", help="Note type introspection.")
+cli.add_typer(media_app, name="media", help="Media file operations.")
 
 
 def _parse_fields(field_args: list[str]) -> dict[str, str]:
@@ -68,7 +72,7 @@ def auth_login() -> None:
 
 @cli.command("sync")
 def sync_cmd(
-    media: Annotated[bool, typer.Option("--media/--no-media")] = False,
+    media: Annotated[bool, typer.Option("--media/--no-media")] = True,
     upload: Annotated[
         bool, typer.Option("--upload/--download", help="Direction for full sync.")
     ] = False,
@@ -427,3 +431,27 @@ def notetypes_fields(
         raise
     except Exception as exc:
         _exit_on_error(exc, "Failed to get fields")
+
+
+# ---------------------------------------------------------------------------
+# media
+# ---------------------------------------------------------------------------
+
+
+@media_app.command("upload")
+def media_upload(
+    paths: Annotated[list[Path], typer.Argument(help="File(s) to copy into the collection media folder.")],
+) -> None:
+    """Copy local files into the collection media folder.
+
+    Returns the stored filename for each file. Use the filename to embed media
+    in note fields: '<img src="file.jpg">' for images, '[sound:file.mp3]' for audio.
+    """
+    try:
+        with open_collection() as col:
+            results = [{"filename": add_media_file(col, p)} for p in paths]
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        _exit_on_error(exc, "Failed to upload media")

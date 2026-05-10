@@ -33,15 +33,15 @@ anki-ai auth login
 Pull changes from AnkiWeb and push local changes back. Performs a full bidirectional sync.
 
 **Flags:**
-- `--media` / `--no-media` — include media files in sync (default: `--no-media`)
+- `--media` / `--no-media` — include media files in sync (default: `--media`)
 - `--upload` / `--download` — direction for a full sync when one is required (default: `--download`)
 
 ```bash
 anki-ai sync
-# Sync complete.
+# Sync complete. (media included by default)
 
-anki-ai sync --media
-# Sync complete.
+anki-ai sync --no-media
+# Sync complete. (skips media)
 
 # First-time or post-schema-change:
 anki-ai sync --download
@@ -72,14 +72,45 @@ Nested deck names use `::` as a separator (Anki convention).
 
 ---
 
+### `anki-ai decks create NAME`
+
+Create a deck. Returns the deck object (existing deck returned unchanged if the name is already taken).
+
+Anki supports nested decks using `::` as a separator. Any missing parent decks are created automatically.
+
+**Output shape:**
+```json
+{ "id": 1715000000002, "name": "Languages::Spanish::Verbs" }
+```
+
+```bash
+anki-ai decks create "Spanish"
+anki-ai decks create "Languages::Spanish::Verbs"
+```
+
+---
+
+### `anki-ai decks delete NAME`
+
+Delete a deck and all its cards. Prompts for confirmation unless `--yes` / `-y` is passed.
+
+```bash
+anki-ai decks delete "Spanish"
+anki-ai decks delete "Spanish" --yes
+```
+
+---
+
 ### `anki-ai notes add`
 
-Add a Basic (Front/Back) note to a named deck. The deck must already exist.
+Add a note to a named deck. The deck must already exist.
 
 **Required flags:**
 - `--deck TEXT` — deck name (exact match, case-sensitive)
-- `--front TEXT` — front field content
-- `--back TEXT` — back field content
+- `--field Name=Value` — field content; repeat for each field (at least one required)
+
+**Optional flags:**
+- `--type TEXT` — note type name (default: `Basic`)
 
 **Output shape:**
 ```json
@@ -87,10 +118,15 @@ Add a Basic (Front/Back) note to a named deck. The deck must already exist.
 ```
 
 ```bash
-anki-ai notes add --deck "Spanish" --front "rendir" --back "to yield"
+anki-ai notes add --deck "Spanish" --field Front="rendir" --field Back="to yield"
 # {"id": 1715001234567}
 
-anki-ai notes add --deck "Default" --front "What is 2+2?" --back "4"
+anki-ai notes add --deck "Default" --type "Basic" --field Front="What is 2+2?" --field Back="4"
+
+# With media — upload first, then embed the returned filename:
+anki-ai media upload bark.mp3
+# [{"filename": "bark.mp3"}]
+anki-ai notes add --deck "Animals" --field Front="What sound does a dog make?" --field Back="[sound:bark.mp3]"
 ```
 
 ---
@@ -134,22 +170,55 @@ anki-ai notes search ""
 
 ---
 
+### `anki-ai media upload FILE [FILE ...]`
+
+Copy one or more local files into the collection's media folder (`collection.media/`).
+Returns the stored filename for each file. Use the filename to embed media in note fields.
+
+- **Images:** `<img src="filename.jpg">`
+- **Audio:** `[sound:filename.mp3]`
+
+Media is included in `anki-ai sync` by default (no extra flags needed).
+
+**Output shape:**
+```json
+[{ "filename": "bark.mp3" }]
+```
+
+```bash
+# Upload a single audio file
+anki-ai media upload /path/to/bark.mp3
+# [{"filename": "bark.mp3"}]
+
+# Upload multiple files at once
+anki-ai media upload photo.jpg audio.mp3
+
+# Full workflow: upload then add note referencing the media
+anki-ai media upload /tmp/bark.mp3
+anki-ai notes add --deck "Animals" \
+  --field Front="What sound does a dog make?" \
+  --field Back="[sound:bark.mp3]"
+anki-ai sync
+```
+
+---
+
 ## Typical Workflow
 
 ```bash
 # 1. Authenticate once
 anki-ai auth login
 
-# 2. Pull cards from phone
+# 2. Pull cards from phone (media included by default)
 anki-ai sync
 
 # 3. See what decks exist
 anki-ai decks list
 
 # 4. Add a new card
-anki-ai notes add --deck "Spanish" --front "rendir" --back "to yield"
+anki-ai notes add --deck "Spanish" --field Front="rendir" --field Back="to yield"
 
-# 5. Push the new card back
+# 5. Push the new card back (media included by default)
 anki-ai sync
 
 # 6. Verify the card is there
