@@ -2,6 +2,7 @@
 
 mod backup;
 mod collection;
+mod notes;
 mod sync;
 
 fn main() {
