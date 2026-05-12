@@ -2,6 +2,7 @@
 
 mod backup;
 mod collection;
+mod decks;
 mod notes;
 mod sync;
 
