@@ -2,6 +2,7 @@
 
 mod backup;
 mod collection;
+mod sync;
 
 fn main() {
     println!("anki-ai");

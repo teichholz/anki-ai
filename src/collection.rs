@@ -80,6 +80,16 @@ impl std::ops::DerefMut for CollectionHandle {
     }
 }
 
+impl CollectionHandle {
+    /// Take ownership of the inner `Collection`, leaving the handle empty.
+    ///
+    /// Used by operations (e.g. full upload/download) that consume the
+    /// collection.  After this call, dereferencing the handle will panic.
+    pub fn take_inner(&mut self) -> Option<Collection> {
+        self.col.take()
+    }
+}
+
 /// Open a collection, auto-detecting path if `None`.
 /// Creates parent directories if needed.
 /// Returns a `CollectionHandle` that closes the collection on drop.
