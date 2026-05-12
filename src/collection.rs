@@ -81,6 +81,11 @@ impl std::ops::DerefMut for CollectionHandle {
 }
 
 impl CollectionHandle {
+    /// Wrap a pre-built `Collection` in a handle.
+    pub fn from_collection(col: Collection) -> Self {
+        Self { col: Some(col) }
+    }
+
     /// Take ownership of the inner `Collection`, leaving the handle empty.
     ///
     /// Used by operations (e.g. full upload/download) that consume the
