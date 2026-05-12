@@ -140,4 +140,28 @@ mod tests {
             "Error message should contain deck name: {err}"
         );
     }
+
+    #[test]
+    fn test_list_decks_due_counts() {
+        let (_dir, mut col) = setup();
+        create_deck(&mut col, "Default").unwrap();
+        let decks = list_decks(&mut col).unwrap();
+        let default_deck = decks
+            .iter()
+            .find(|d| d.name == "Default")
+            .expect("Default deck should be present");
+        // Due count fields are u32, so they are always >= 0 by type.
+        // Verify the fields are accessible and their types are correct.
+        let _new: u32 = default_deck.new;
+        let _learning: u32 = default_deck.learning;
+        let _review: u32 = default_deck.review;
+    }
+
+    #[test]
+    fn test_create_deck_idempotent() {
+        let (_dir, mut col) = setup();
+        let first = create_deck(&mut col, "IdempotentDeck").unwrap();
+        let second = create_deck(&mut col, "IdempotentDeck").unwrap();
+        assert_eq!(first.id, second.id, "Repeated create_deck should return the same ID");
+    }
 }

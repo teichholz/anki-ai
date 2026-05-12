@@ -259,4 +259,44 @@ mod tests {
         let err = get_note(&mut col, 999999999).unwrap_err();
         assert!(err.to_string().contains("Note 999999999 not found."));
     }
+
+    #[test]
+    fn test_search_notes_empty_result() {
+        let (_dir, mut col) = setup();
+        let results = search_notes(&mut col, "zzz_no_such_term_xyz_999").unwrap();
+        assert!(results.is_empty(), "Expected empty results, got: {results:?}");
+    }
+
+    #[test]
+    fn test_update_note_not_found() {
+        let (_dir, mut col) = setup();
+        let mut fields = HashMap::new();
+        fields.insert("Front".to_string(), "New".to_string());
+        let err = update_note(&mut col, 999999999, &fields).unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_update_note_invalid_field() {
+        let (_dir, mut col) = setup();
+        let mut fields = HashMap::new();
+        fields.insert("Front".to_string(), "Hello".to_string());
+        fields.insert("Back".to_string(), "World".to_string());
+        let id = add_note(&mut col, "Default", "Basic", &fields).unwrap();
+
+        let mut bad_fields = HashMap::new();
+        bad_fields.insert("NonExistentField".to_string(), "value".to_string());
+        let err = update_note(&mut col, id, &bad_fields).unwrap_err();
+        assert!(
+            err.to_string().contains("Field"),
+            "Expected 'Field' in error message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_delete_note_not_found() {
+        let (_dir, mut col) = setup();
+        let err = delete_note(&mut col, 999999999).unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
 }
