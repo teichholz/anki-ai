@@ -1,21 +1,20 @@
 use std::path::{Path, PathBuf};
 
 use anki::collection::{Collection, CollectionBuilder};
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 /// Detect Anki collection path from env or filesystem.
 /// Priority: ANKI_COLLECTION_PATH env → scan ~/.local/share/Anki2/ → fallback
-pub fn get_collection_path() -> PathBuf {
+pub fn get_collection_path() -> Result<PathBuf> {
     // 1. Check environment variable
-    if let Ok(env_path) = std::env::var("ANKI_COLLECTION_PATH") {
-        let path = PathBuf::from(&env_path);
-        // Expand leading ~ if present
-        if let Some(stripped) = env_path.strip_prefix("~/") {
-            if let Some(home) = dirs::home_dir() {
-                return home.join(stripped);
-            }
+    if let Some(env_path) = std::env::var_os("ANKI_COLLECTION_PATH") {
+        let env_path = PathBuf::from(env_path);
+        if let Ok(stripped) = env_path.strip_prefix("~/") {
+            let home = dirs::home_dir()
+                .context("HOME directory not set; cannot expand ~ in ANKI_COLLECTION_PATH")?;
+            return Ok(home.join(stripped));
         }
-        return path;
+        return Ok(env_path);
     }
 
     // 2. Scan ~/.local/share/Anki2/ for first non-hidden directory with collection.anki2
@@ -39,18 +38,19 @@ pub fn get_collection_path() -> PathBuf {
                 for dir in dirs_vec {
                     let candidate = dir.join("collection.anki2");
                     if candidate.exists() {
-                        return candidate;
+                        return Ok(candidate);
                     }
                 }
             }
         }
 
         // 3. Fallback
-        return data_dir.join("Anki2").join("User 1").join("collection.anki2");
+        return Ok(data_dir.join("Anki2").join("User 1").join("collection.anki2"));
     }
 
     // Last resort if data_local_dir() is unavailable
-    PathBuf::from("~/.local/share/Anki2/User 1/collection.anki2")
+    let home = dirs::home_dir().context("HOME directory not set")?;
+    Ok(home.join(".local/share/Anki2/User 1/collection.anki2"))
 }
 
 /// A handle that owns a `Collection` and closes it cleanly on drop.
@@ -86,7 +86,7 @@ impl std::ops::DerefMut for CollectionHandle {
 pub fn open_collection(path: Option<&Path>) -> Result<CollectionHandle> {
     let col_path = match path {
         Some(p) => p.to_path_buf(),
-        None => get_collection_path(),
+        None => get_collection_path()?,
     };
 
     if let Some(parent) = col_path.parent() {
@@ -131,8 +131,19 @@ mod tests {
     #[test]
     fn test_get_collection_path_from_env() {
         std::env::set_var("ANKI_COLLECTION_PATH", "/tmp/test.anki2");
-        let path = get_collection_path();
+        let path = get_collection_path().unwrap();
         assert_eq!(path, PathBuf::from("/tmp/test.anki2"));
+        std::env::remove_var("ANKI_COLLECTION_PATH");
+    }
+
+    #[test]
+    fn test_get_collection_path_tilde_expansion() {
+        std::env::remove_var("ANKI_COLLECTION_PATH");
+        // Temporarily set to a tilde path to test expansion
+        std::env::set_var("ANKI_COLLECTION_PATH", "~/test.anki2");
+        let path = get_collection_path().unwrap();
+        // Tilde should be expanded (path doesn't contain literal ~)
+        assert!(!path.to_string_lossy().starts_with('~'));
         std::env::remove_var("ANKI_COLLECTION_PATH");
     }
 }
