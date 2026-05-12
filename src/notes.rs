@@ -113,13 +113,10 @@ pub fn update_note(
     let field_names: Vec<String> = nt.fields.iter().map(|f| f.name.clone()).collect();
 
     for (name, value) in fields {
-        let idx = field_names.iter().position(|n| n == name).ok_or_else(|| {
-            anyhow!(
-                "Field '{}' not found. Valid: {:?}",
-                name,
-                field_names
-            )
-        })?;
+        let idx = field_names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(|| anyhow!("Field '{}' not found. Valid: {:?}", name, field_names))?;
         note.set_field(idx, value.as_str())?;
     }
 
@@ -233,7 +230,9 @@ mod tests {
         let (_dir, mut col) = setup();
         let fields = HashMap::new();
         let err = add_note(&mut col, "Default", "NonExistentType", &fields).unwrap_err();
-        assert!(err.to_string().contains("Note type 'NonExistentType' not found."));
+        assert!(err
+            .to_string()
+            .contains("Note type 'NonExistentType' not found."));
     }
 
     #[test]
@@ -241,7 +240,9 @@ mod tests {
         let (_dir, mut col) = setup();
         let fields = HashMap::new();
         let err = add_note(&mut col, "NonExistentDeck", "Basic", &fields).unwrap_err();
-        assert!(err.to_string().contains("Deck 'NonExistentDeck' not found."));
+        assert!(err
+            .to_string()
+            .contains("Deck 'NonExistentDeck' not found."));
     }
 
     #[test]
@@ -250,7 +251,9 @@ mod tests {
         let mut fields = HashMap::new();
         fields.insert("NonExistentField".to_string(), "value".to_string());
         let err = add_note(&mut col, "Default", "Basic", &fields).unwrap_err();
-        assert!(err.to_string().contains("Field 'NonExistentField' not in 'Basic'"));
+        assert!(err
+            .to_string()
+            .contains("Field 'NonExistentField' not in 'Basic'"));
     }
 
     #[test]
@@ -264,7 +267,10 @@ mod tests {
     fn test_search_notes_empty_result() {
         let (_dir, mut col) = setup();
         let results = search_notes(&mut col, "zzz_no_such_term_xyz_999").unwrap();
-        assert!(results.is_empty(), "Expected empty results, got: {results:?}");
+        assert!(
+            results.is_empty(),
+            "Expected empty results, got: {results:?}"
+        );
     }
 
     #[test]

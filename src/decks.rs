@@ -162,6 +162,9 @@ mod tests {
         let (_dir, mut col) = setup();
         let first = create_deck(&mut col, "IdempotentDeck").unwrap();
         let second = create_deck(&mut col, "IdempotentDeck").unwrap();
-        assert_eq!(first.id, second.id, "Repeated create_deck should return the same ID");
+        assert_eq!(
+            first.id, second.id,
+            "Repeated create_deck should return the same ID"
+        );
     }
 }

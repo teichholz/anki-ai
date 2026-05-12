@@ -45,7 +45,10 @@ pub fn get_collection_path() -> Result<PathBuf> {
         }
 
         // 3. Fallback
-        return Ok(data_dir.join("Anki2").join("User 1").join("collection.anki2"));
+        return Ok(data_dir
+            .join("Anki2")
+            .join("User 1")
+            .join("collection.anki2"));
     }
 
     // Last resort if data_local_dir() is unavailable
@@ -82,6 +85,7 @@ impl std::ops::DerefMut for CollectionHandle {
 
 impl CollectionHandle {
     /// Wrap a pre-built `Collection` in a handle.
+    #[allow(dead_code)]
     pub fn from_collection(col: Collection) -> Self {
         Self { col: Some(col) }
     }

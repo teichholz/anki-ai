@@ -59,11 +59,7 @@ pub fn save_hkey(hkey: &str) -> Result<()> {
 /// Prints a one-line status message on success.  On full-sync the collection
 /// is consumed internally; the handle is left with its inner `Option` set to
 /// `None`.  Callers that need the collection afterwards should re-open it.
-pub async fn run_sync(
-    col: &mut CollectionHandle,
-    sync_media: bool,
-    upload: bool,
-) -> Result<()> {
+pub async fn run_sync(col: &mut CollectionHandle, sync_media: bool, upload: bool) -> Result<()> {
     let hkey = load_hkey()?;
     let client = reqwest::Client::new();
 
@@ -227,10 +223,7 @@ mod tests {
         std::fs::write(&path, r#"{"other_key": "value"}"#).unwrap();
 
         let err = load_hkey_from(&path).unwrap_err();
-        assert!(
-            err.to_string().contains("\"hkey\" field missing"),
-            "{err}"
-        );
+        assert!(err.to_string().contains("\"hkey\" field missing"), "{err}");
     }
 
     #[test]
@@ -240,10 +233,7 @@ mod tests {
         std::fs::write(&path, r#"{"hkey": ""}"#).unwrap();
 
         let err = load_hkey_from(&path).unwrap_err();
-        assert!(
-            err.to_string().contains("\"hkey\" field missing"),
-            "{err}"
-        );
+        assert!(err.to_string().contains("\"hkey\" field missing"), "{err}");
     }
 
     #[test]

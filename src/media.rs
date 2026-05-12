@@ -8,7 +8,10 @@ use crate::collection::CollectionHandle;
 /// Reads the file at `path`, uploads it under the file's own name, and
 /// returns the name Anki ultimately stored it under (Anki may de-duplicate
 /// by appending a suffix).
-pub fn add_media_file(col: &mut CollectionHandle, path: &std::path::Path) -> anyhow::Result<String> {
+pub fn add_media_file(
+    col: &mut CollectionHandle,
+    path: &std::path::Path,
+) -> anyhow::Result<String> {
     if !path.exists() {
         return Err(anyhow::anyhow!("File not found: {}", path.display()));
     }

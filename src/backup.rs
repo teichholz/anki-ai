@@ -25,10 +25,7 @@ fn snapshots_dir(collection_path: &Path) -> PathBuf {
 /// Format a `SystemTime` as `YYYY-MM-DD-HH.MM.SS` using UTC-equivalent
 /// decomposition via the seconds-since-epoch.
 fn format_timestamp(t: SystemTime) -> String {
-    let secs = t
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let secs = t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
     // Manual calendar decomposition (no external crate needed).
     // Algorithm: convert Unix timestamp to (year, month, day, hour, min, sec).

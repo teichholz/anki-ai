@@ -177,7 +177,10 @@ mod tests {
         add_basic_note(&mut col);
 
         let results = find_cards(&mut col, "deck:Default").unwrap();
-        assert!(!results.is_empty(), "Expected at least one card in Default deck");
+        assert!(
+            !results.is_empty(),
+            "Expected at least one card in Default deck"
+        );
 
         // Verify the result has expected structure
         let card = &results[0];
