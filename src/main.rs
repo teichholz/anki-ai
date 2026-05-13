@@ -111,7 +111,14 @@ enum Commands {
 #[derive(Subcommand)]
 enum AuthCmd {
     /// Exchange AnkiWeb credentials for an auth token and store it.
-    Login,
+    Login {
+        /// AnkiWeb email address.
+        #[arg(long)]
+        email: Option<String>,
+        /// AnkiWeb password (prefer interactive prompt to avoid shell history exposure).
+        #[arg(long)]
+        password: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -300,15 +307,27 @@ async fn run() -> Result<()> {
         // auth login
         // -------------------------------------------------------------------
         Commands::Auth {
-            cmd: AuthCmd::Login,
+            cmd: AuthCmd::Login { email, password },
         } => {
-            print!("AnkiWeb email: ");
-            io::stdout().flush()?;
-            let mut email = String::new();
-            io::stdin().lock().read_line(&mut email)?;
-            let email = email.trim().to_string();
+            let email = match email
+                .or_else(|| std::env::var("ANKI_EMAIL").ok())
+            {
+                Some(e) => e,
+                None => {
+                    print!("AnkiWeb email: ");
+                    io::stdout().flush()?;
+                    let mut buf = String::new();
+                    io::stdin().lock().read_line(&mut buf)?;
+                    buf.trim().to_string()
+                }
+            };
 
-            let password = rpassword::read_password()?;
+            let password = match password
+                .or_else(|| std::env::var("ANKI_PASSWORD").ok())
+            {
+                Some(p) => p,
+                None => rpassword::prompt_password("Password: ")?,
+            };
 
             let client = reqwest::Client::new();
             let auth = anki::sync::login::sync_login(email, password, None, client).await?;
