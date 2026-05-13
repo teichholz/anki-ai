@@ -309,9 +309,7 @@ async fn run() -> Result<()> {
         Commands::Auth {
             cmd: AuthCmd::Login { email, password },
         } => {
-            let email = match email
-                .or_else(|| std::env::var("ANKI_EMAIL").ok())
-            {
+            let email = match email.or_else(|| std::env::var("ANKI_EMAIL").ok()) {
                 Some(e) => e,
                 None => {
                     print!("AnkiWeb email: ");
@@ -322,9 +320,7 @@ async fn run() -> Result<()> {
                 }
             };
 
-            let password = match password
-                .or_else(|| std::env::var("ANKI_PASSWORD").ok())
-            {
+            let password = match password.or_else(|| std::env::var("ANKI_PASSWORD").ok()) {
                 Some(p) => p,
                 None => rpassword::prompt_password("Password: ")?,
             };
