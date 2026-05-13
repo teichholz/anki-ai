@@ -249,8 +249,20 @@ Add a note to a named deck.
 ```
 
 ```bash
+# Basic — explicit Q/A pair:
 anki-ai notes add --deck "Spanish" --field Front="rendir" --field Back="to yield"
 anki-ai notes add --deck "Default" --type "Basic" --field Front="What is 2+2?" --field Back="4"
+
+# Cloze — one sentence, one or more blanks; generates a card per {{cN::}} group:
+anki-ai notes add --deck "Biology" --type "Cloze" \
+  --field Text="The {{c1::mitochondria}} is the {{c2::powerhouse}} of the cell."
+anki-ai notes add --deck "Spanish" --type "Cloze" \
+  --field Text="{{c1::Haber}} is the auxiliary verb used to form the {{c2::present perfect}}."
+
+# Cloze with extra hint shown on answer side:
+anki-ai notes add --deck "Medicine" --type "Cloze" \
+  --field Text="{{c1::Aspirin}} inhibits {{c2::COX-1 and COX-2}}." \
+  --field "Back Extra"="NSAIDs mechanism"
 
 # With media — upload first, then embed the returned filename:
 anki-ai media upload /tmp/bark.mp3
@@ -584,15 +596,31 @@ ANKI_EMAIL=user@example.com ANKI_PASSWORD=s3cr3t anki-ai auth login
 anki-ai sync
 ```
 
-### Add cards (agent session)
+### Add Basic cards (agent session)
 ```bash
 anki-ai sync                                        # pull latest from phone
 anki-ai snapshot                                    # safety checkpoint
 anki-ai decks list                                  # check deck names
-anki-ai notetypes fields "Basic"                    # check field names
+anki-ai notetypes fields "Basic"                    # fields: Front, Back
 anki-ai notes add --deck "Spanish" --field Front="rendir" --field Back="to yield"
 anki-ai sync                                        # push new card to AnkiWeb
 anki-ai notes search "rendir"                       # verify
+```
+
+### Add Cloze cards (agent session)
+Use Cloze when the fact lives inside a sentence and context helps recall.
+Each `{{cN::answer}}` group produces one card; multiple groups in one note = multiple cards.
+```bash
+anki-ai sync
+anki-ai snapshot
+anki-ai notetypes fields "Cloze"                    # fields: Text, Back Extra
+anki-ai notes add --deck "Biology" --type "Cloze" \
+  --field Text="The {{c1::mitochondria}} produces {{c2::ATP}} via oxidative phosphorylation."
+anki-ai notes add --deck "History" --type "Cloze" \
+  --field Text="{{c1::World War II}} ended in {{c2::1945}}." \
+  --field "Back Extra"="VE Day: May 8; VJ Day: Sep 2"
+anki-ai sync
+anki-ai notes search "deck:Biology note:Cloze"      # verify
 ```
 
 ### Bulk tag operation
