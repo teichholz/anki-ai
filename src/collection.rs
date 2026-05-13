@@ -85,7 +85,6 @@ impl std::ops::DerefMut for CollectionHandle {
 
 impl CollectionHandle {
     /// Wrap a pre-built `Collection` in a handle.
-    #[allow(dead_code)]
     pub fn from_collection(col: Collection) -> Self {
         Self { col: Some(col) }
     }
@@ -112,7 +111,9 @@ pub fn open_collection(path: Option<&Path>) -> Result<CollectionHandle> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let col = CollectionBuilder::new(&col_path).build()?;
+    let col = CollectionBuilder::new(&col_path)
+        .with_desktop_media_paths()
+        .build()?;
     Ok(CollectionHandle { col: Some(col) })
 }
 
@@ -145,6 +146,16 @@ mod tests {
         }
         // If the collection wasn't closed, this would fail with a lock error
         let _col2 = open_collection(Some(&path)).unwrap();
+    }
+
+    #[test]
+    fn test_media_manager_available_after_open() {
+        // Regression: collection must be opened with a media folder so that
+        // col.media() succeeds and media sync doesn't fail.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("collection.anki2");
+        let col = open_collection(Some(&path)).unwrap();
+        col.media().expect("media manager should be accessible after open_collection");
     }
 
     #[test]

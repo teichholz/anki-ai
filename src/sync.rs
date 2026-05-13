@@ -100,8 +100,9 @@ pub async fn run_sync(col: &mut CollectionHandle, sync_media: bool, upload: bool
             let do_upload = upload || !download_ok;
             let direction = if do_upload { "upload" } else { "download" };
 
-            // full_upload / full_download consume the Collection, so we take
-            // it out of the CollectionHandle Option.
+            // Save the builder before full_upload/full_download consume the Collection.
+            let mut builder = col.as_builder();
+
             let inner = col
                 .take_inner()
                 .context("collection was already closed before full sync")?;
@@ -119,7 +120,24 @@ pub async fn run_sync(col: &mut CollectionHandle, sync_media: bool, upload: bool
             }
 
             println!("Full {direction} complete.");
-            // col.col is now None; caller must re-open.
+
+            if sync_media {
+                let col2 = CollectionHandle::from_collection(
+                    builder
+                        .build()
+                        .context("re-opening collection after full sync")?,
+                );
+                let media_mgr = col2
+                    .media()
+                    .context("cannot open media manager for media sync")?;
+                let progress = col2.new_progress_handler();
+                media_mgr
+                    .sync_media(progress, auth, client, None)
+                    .await
+                    .context("media sync failed")?;
+                println!("Media sync complete.");
+            }
+
             return Ok(());
         }
     }
