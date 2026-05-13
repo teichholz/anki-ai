@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "anki-ai"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "anki",
  "anki_proto",
