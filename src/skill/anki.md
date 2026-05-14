@@ -14,7 +14,8 @@ All data commands write JSON to stdout. Errors go to stderr with a non-zero exit
 
 - **Never run interactive commands.** Use `--email`/`--password` flags for auth; use `--yes` for all destructive commands.
 - **Always sync before reading** if freshness matters; **always sync after writing** to push changes to AnkiWeb.
-- **Snapshot before bulk operations.** Run `anki-ai snapshot` before any bulk add/update/delete session.
+- **Snapshot before bulk operations.** Run `anki-ai snapshot` before any bulk add/update/delete/move/find-replace session.
+- **Use `restore --last` to undo.** There is no undo command — `anki-ai restore --last --yes` restores from the most recent snapshot.
 - **Auth is persistent.** After one successful `auth login`, the hkey is stored at `~/.config/anki-ai/auth.json` (mode 0600). No need to re-auth between commands.
 - **Full sync exits cleanly.** When a full sync is required, the binary completes the upload or download and exits with code 0. The next command re-opens the collection normally — no special handling needed.
 
@@ -76,23 +77,10 @@ When server and client schemas diverge, a full sync is triggered automatically.
 | `Media sync complete.` | Media phase done (printed after collection sync when `--media` is active) |
 
 ```bash
-# Standard sync (collection + media):
-anki-ai sync
-
-# Skip media:
-anki-ai sync --media=false
-
-# Force full upload (e.g. after manual DB edits):
-anki-ai sync --upload
-
-# First-time sync or after schema change (download wins by default):
-anki-ai sync
-# Full download complete.
-# Media sync complete.
+anki-ai sync               # standard sync (collection + media)
+anki-ai sync --media=false # skip media
+anki-ai sync --upload      # force full upload
 ```
-
-**Full sync note:** `--upload` forces upload. Without it, download is preferred unless the server
-cannot accept a download (in which case upload is used automatically).
 
 ---
 
@@ -111,26 +99,17 @@ Show collection statistics.
 }
 ```
 
-```bash
-anki-ai info
-```
-
 ---
 
-## Snapshots
+## Snapshots & Undo
 
 ### `anki-ai snapshot`
 
-Create a timestamped snapshot of the collection file before making bulk changes.
-Snapshots are stored in `~/.local/share/Anki2/<profile>/snapshots/`.
+Create a timestamped snapshot of the collection file. Always run before any bulk or destructive operation.
 
 **Output shape:**
 ```json
-{ "snapshot": "/home/user/.local/share/Anki2/User 1/snapshots/snapshot-2026-05-10-19.18.36.anki2" }
-```
-
-```bash
-anki-ai snapshot
+{ "snapshot": "/home/user/.local/share/Anki2/User 1/snapshots/snapshot-2026-05-14-10.30.00.anki2" }
 ```
 
 ---
@@ -143,38 +122,38 @@ List all available snapshots (newest first).
 ```json
 [
   {
-    "name": "snapshot-2026-05-10-19.18.36.anki2",
-    "path": "/home/user/.local/share/Anki2/User 1/snapshots/snapshot-2026-05-10-19.18.36.anki2",
+    "name": "snapshot-2026-05-14-10.30.00.anki2",
+    "path": "/home/user/.local/share/Anki2/User 1/snapshots/snapshot-2026-05-14-10.30.00.anki2",
     "bytes": 10117120
   }
 ]
 ```
 
-```bash
-anki-ai snapshots
-```
-
 ---
 
-### `anki-ai restore SNAPSHOT`
+### `anki-ai restore [SNAPSHOT] [--last]`
 
 Restore the collection from a snapshot, overwriting the current state.
 
-**Argument:** bare filename (e.g. `snapshot-2026-05-10-19.18.36.anki2`) or full path.
-
-**Flags:**
+**Arguments / flags:**
+- `SNAPSHOT` — bare filename or full path (mutually exclusive with `--last`)
+- `--last` — automatically select the most recent snapshot (agent undo shorthand)
 - `--yes` / `-y` — skip confirmation prompt (required for AI agents)
 
 ```bash
-anki-ai restore snapshot-2026-05-10-19.18.36.anki2 --yes
+# Undo: restore the most recent snapshot (preferred agent pattern)
+anki-ai restore --last --yes
+
+# Restore a specific snapshot by name
+anki-ai restore snapshot-2026-05-14-10.30.00.anki2 --yes
 ```
 
-**Rollback workflow:**
+**Standard rollback workflow:**
 ```bash
-anki-ai snapshot                                           # before session
+anki-ai snapshot          # checkpoint before session
 # ... make changes ...
-anki-ai restore snapshot-2026-05-10-19.18.36.anki2 --yes  # rollback
-anki-ai sync                                               # push rollback to AnkiWeb
+anki-ai restore --last --yes   # something went wrong — revert
+anki-ai sync              # push rollback to AnkiWeb
 ```
 
 ---
@@ -183,19 +162,15 @@ anki-ai sync                                               # push rollback to An
 
 ### `anki-ai decks list`
 
-Print all decks as a JSON array. Nested deck names use `::` as separator.
+Print all decks as a JSON array with today's due card counts.
 
 **Output shape:**
 ```json
 [
-  { "id": 1, "name": "Default" },
-  { "id": 1715000000000, "name": "Spanish" },
-  { "id": 1715000000001, "name": "Spanish::Verbs" }
+  { "id": 1, "name": "Default", "new": 0, "learning": 0, "review": 0 },
+  { "id": 1715000000000, "name": "Spanish", "new": 5, "learning": 2, "review": 10 },
+  { "id": 1715000000001, "name": "Spanish::Verbs", "new": 3, "learning": 1, "review": 4 }
 ]
-```
-
-```bash
-anki-ai decks list
 ```
 
 ---
@@ -203,11 +178,11 @@ anki-ai decks list
 ### `anki-ai decks create NAME`
 
 Create a deck. Returns the deck object (unchanged if name already exists).
-Missing parent decks are created automatically.
+Missing parent decks are created automatically. Use `::` for nesting.
 
 **Output shape:**
 ```json
-{ "id": 1715000000002, "name": "Languages::Spanish::Verbs" }
+{ "id": 1715000000002, "name": "Languages::Spanish::Verbs", "new": 0, "learning": 0, "review": 0 }
 ```
 
 ```bash
@@ -219,13 +194,76 @@ anki-ai decks create "Languages::Spanish::Verbs"
 
 ### `anki-ai decks delete NAME`
 
-Delete a deck and all its cards.
+Delete a deck and all its notes and cards. Child decks are also deleted.
 
 **Flags:**
 - `--yes` / `-y` — skip confirmation (required for AI agents)
 
 ```bash
 anki-ai decks delete "Spanish" --yes
+```
+
+---
+
+### `anki-ai decks rename OLD NEW`
+
+Rename a deck. Child decks follow automatically (`Old::Child` → `New::Child`).
+
+**Output shape:** `DeckInfo` (see `decks list`)
+
+```bash
+anki-ai decks rename "Spanish" "Español"
+anki-ai decks rename "Languages::Spanish" "Languages::Español"
+```
+
+---
+
+### `anki-ai decks reparent DECK [--parent PARENT | --root]`
+
+Move a deck to a different parent without changing its leaf name. Child decks follow automatically.
+
+**Flags:**
+- `--parent NAME` — new parent deck (created if absent; mutually exclusive with `--root`)
+- `--root` — promote to top level (mutually exclusive with `--parent`)
+
+**Output shape:** `DeckInfo` with updated name
+
+```bash
+# Move "N5" under "Japanese"  →  "Japanese::N5"
+anki-ai decks reparent "N5" --parent "Japanese"
+
+# Promote "Japanese::N5" to top level  →  "N5"
+anki-ai decks reparent "Japanese::N5" --root
+```
+
+---
+
+### `anki-ai decks config get NAME`
+
+Show study limits for a deck.
+
+**Output shape:**
+```json
+{ "config_id": 1, "config_name": "Default", "new_per_day": 20, "reviews_per_day": 200 }
+```
+
+> **Note:** Deck configs are shared. Multiple decks can share the same `config_id`. Changing one config changes it for all decks that use it — the same as the Anki GUI behaviour.
+
+```bash
+anki-ai decks config get "Japanese"
+```
+
+---
+
+### `anki-ai decks config set NAME [--new-per-day N] [--reviews-per-day N]`
+
+Update study limits for a deck. Omit a flag to leave that value unchanged.
+
+**Output shape:** same as `decks config get`
+
+```bash
+anki-ai decks config set "Japanese" --new-per-day 10
+anki-ai decks config set "Japanese" --new-per-day 10 --reviews-per-day 100
 ```
 
 ---
@@ -251,23 +289,16 @@ Add a note to a named deck.
 ```bash
 # Basic — explicit Q/A pair:
 anki-ai notes add --deck "Spanish" --field Front="rendir" --field Back="to yield"
-anki-ai notes add --deck "Default" --type "Basic" --field Front="What is 2+2?" --field Back="4"
 
-# Cloze — one sentence, one or more blanks; generates a card per {{cN::}} group:
+# Cloze — blanks via {{cN::answer}}; each group generates one card:
 anki-ai notes add --deck "Biology" --type "Cloze" \
-  --field Text="The {{c1::mitochondria}} is the {{c2::powerhouse}} of the cell."
-anki-ai notes add --deck "Spanish" --type "Cloze" \
-  --field Text="{{c1::Haber}} is the auxiliary verb used to form the {{c2::present perfect}}."
+  --field Text="The {{c1::mitochondria}} produces {{c2::ATP}} via oxidative phosphorylation."
 
-# Cloze with extra hint shown on answer side:
-anki-ai notes add --deck "Medicine" --type "Cloze" \
-  --field Text="{{c1::Aspirin}} inhibits {{c2::COX-1 and COX-2}}." \
-  --field "Back Extra"="NSAIDs mechanism"
-
-# With media — upload first, then embed the returned filename:
+# With media — upload first, embed the returned filename:
 anki-ai media upload /tmp/bark.mp3
-# [{"filename": "bark.mp3"}]
-anki-ai notes add --deck "Animals" --field Front="What sound does a dog make?" --field Back="[sound:bark.mp3]"
+anki-ai notes add --deck "Animals" \
+  --field Front="What sound does a dog make?" \
+  --field Back="[sound:bark.mp3]"
 ```
 
 ---
@@ -280,74 +311,57 @@ Get a single note by ID.
 ```json
 {
   "id": 1715001234567,
-  "fields": {
-    "Front": "rendir",
-    "Back": "to yield"
-  },
+  "type": "Basic",
+  "fields": { "Front": "rendir", "Back": "to yield" },
   "tags": ["verb", "irregular"]
 }
-```
-
-```bash
-anki-ai notes get 1715001234567
 ```
 
 ---
 
 ### `anki-ai notes search QUERY`
 
-Run an Anki search query and return matching notes as a JSON array.
+Run an Anki search query and return matching notes as a JSON array. Returns `[]` when nothing matches.
 
-**Output shape:**
-```json
-[
-  {
-    "id": 1715001234567,
-    "fields": { "Front": "rendir", "Back": "to yield" },
-    "tags": ["verb", "irregular"]
-  }
-]
-```
+**Output shape:** array of note objects (same shape as `notes get`)
 
 ```bash
-anki-ai notes search "deck:Spanish"          # all notes in a deck
-anki-ai notes search "rendir"                # notes containing a word
-anki-ai notes search "tag:irregular"         # notes with a tag
-anki-ai notes search "deck:Spanish modified:7"  # modified in last 7 days
-anki-ai notes search "nid:1715001234567"     # exact note by ID
-anki-ai notes search ""                      # all notes
+anki-ai notes search "deck:Spanish"
+anki-ai notes search "tag:irregular"
+anki-ai notes search "deck:Spanish modified:7"
+anki-ai notes search ""                            # all notes
 ```
 
 **Common search operators:**
 
 | Syntax | Matches |
 |---|---|
-| `deck:Name` | Notes in deck (use `deck:Name::*` for sub-decks too) |
+| `deck:Name` | Notes in deck (exact); `deck:Name*` includes sub-decks |
 | `tag:name` | Notes with tag |
 | `note:TypeName` | Notes of a note type |
+| `Front:word` | Notes where the Front field contains "word" |
 | `is:due` | Cards due for review |
 | `is:new` | Unseen cards |
 | `is:suspended` | Suspended cards |
 | `is:buried` | Buried cards |
 | `modified:N` | Modified within last N days |
+| `added:N` | Added within last N days |
 | `nid:ID` | Specific note ID |
 | `cid:ID` | Specific card ID |
 | `rated:N` | Reviewed within last N days |
-| `"exact phrase"` | Exact phrase match |
+| `-tag:name` | Notes NOT tagged "name" (negate with `-`) |
+| `deck:A OR deck:B` | Notes in A or B |
 
 ---
 
 ### `anki-ai notes update NOTE_ID`
 
-Update one or more fields of an existing note.
+Update one or more fields of an existing note. Only specified fields change.
 
 **Required flags:**
-- `--field Name=Value` — field to update; repeat for each field (at least one required)
+- `--field Name=Value` — field to update; repeat for each field
 
-**Output shape:**
-```json
-{ "id": 1715001234567 }
-```
+**Output shape:** full `NoteInfo` (same as `notes get`)
 
 ```bash
 anki-ai notes update 1715001234567 --field Back="to surrender / to yield"
@@ -369,6 +383,48 @@ anki-ai notes delete 1715001234567 --yes
 
 ---
 
+### `anki-ai notes move --deck NAME NOTE_ID [NOTE_ID ...]`
+
+Move one or more notes to a different deck. Moves all cards of each note.
+
+**Output shape:**
+```json
+{ "moved": 3 }
+```
+The count is cards moved, not notes (a note with 2 templates contributes 2 cards).
+
+```bash
+anki-ai notes move --deck "Japanese::N5" 1715001234567 1715001234568
+```
+
+---
+
+### `anki-ai notes find-replace PATTERN REPLACEMENT [--field NAME] [-q QUERY]`
+
+Bulk regex find/replace across note fields. `PATTERN` is a Rust regex.
+
+**Flags:**
+- `--field NAME` — restrict to one field; omit for all fields
+- `-q QUERY` — Anki search query to scope notes (default: all notes)
+
+**Output shape:**
+```json
+{ "updated": 12 }
+```
+
+```bash
+# Replace across all notes, all fields
+anki-ai notes find-replace "colour" "color"
+
+# Case-insensitive, scoped to one field and one deck
+anki-ai notes find-replace "(?i)grey" "gray" --field Back -q "deck:English"
+
+# Fix a typo only in the Front field
+anki-ai notes find-replace "teh" "the" --field Front
+```
+
+---
+
 ## Cards
 
 ### `anki-ai cards list QUERY`
@@ -377,15 +433,7 @@ Find cards matching a search query. Returns card IDs and basic info.
 
 **Output shape:**
 ```json
-[
-  { "id": 1715001234568, "note_id": 1715001234567, "deck_id": 1715000000000 }
-]
-```
-
-```bash
-anki-ai cards list "deck:Spanish"
-anki-ai cards list "is:due"
-anki-ai cards list "is:suspended"
+[{ "id": 1715001234568, "note_id": 1715001234567, "deck_id": 1715000000000 }]
 ```
 
 ---
@@ -409,24 +457,16 @@ Show scheduling info for a card.
 }
 ```
 
-```bash
-anki-ai cards info 1715001234568
-```
-
 ---
 
 ### `anki-ai cards suspend CARD_ID [CARD_ID ...]`
 
 Suspend one or more cards by ID.
 
-**Output shape:**
-```json
-{ "suspended": 2 }
-```
+**Output shape:** `{ "suspended": 2 }`
 
 ```bash
-anki-ai cards suspend 1715001234568
-anki-ai cards suspend 1715001234568 1715001234569 1715001234570
+anki-ai cards suspend 1715001234568 1715001234569
 ```
 
 ---
@@ -435,14 +475,7 @@ anki-ai cards suspend 1715001234568 1715001234569 1715001234570
 
 Unsuspend one or more cards by ID.
 
-**Output shape:**
-```json
-{ "unsuspended": 2 }
-```
-
-```bash
-anki-ai cards unsuspend 1715001234568 1715001234569
-```
+**Output shape:** `{ "unsuspended": 2 }`
 
 ---
 
@@ -450,16 +483,9 @@ anki-ai cards unsuspend 1715001234568 1715001234569
 
 ### `anki-ai tags list`
 
-List all tags in the collection.
+List all tags in the collection as a sorted JSON array.
 
-**Output shape:**
-```json
-["irregular", "phrase", "verb"]
-```
-
-```bash
-anki-ai tags list
-```
+**Output shape:** `["irregular", "phrase", "verb"]`
 
 ---
 
@@ -467,13 +493,9 @@ anki-ai tags list
 
 Add one or more tags to notes matching a search query.
 
-**Flags:**
-- `-q` / `--query TEXT` — Anki search query (default: `deck:current`)
+**Flags:** `-q` / `--query TEXT` — Anki search query (default: `deck:current`)
 
-**Output shape:**
-```json
-{ "updated": 12 }
-```
+**Output shape:** `{ "updated": 12 }`
 
 ```bash
 anki-ai tags add irregular -q "deck:Spanish"
@@ -484,19 +506,9 @@ anki-ai tags add verb irregular -q "tag:spanish-verb"
 
 ### `anki-ai tags remove TAG [TAG ...] -q QUERY`
 
-Remove one or more tags from notes matching a search query.
+Remove one or more tags from notes matching a search query. `-q` is required.
 
-**Required flags:**
-- `-q` / `--query TEXT` — Anki search query (no default; must be specified)
-
-**Output shape:**
-```json
-{ "updated": 5 }
-```
-
-```bash
-anki-ai tags remove irregular -q "deck:Spanish"
-```
+**Output shape:** `{ "updated": 5 }`
 
 ---
 
@@ -504,14 +516,7 @@ anki-ai tags remove irregular -q "deck:Spanish"
 
 Rename a tag across all notes in the collection.
 
-**Output shape:**
-```json
-{ "updated": 8 }
-```
-
-```bash
-anki-ai tags rename "irregular" "verb-irregular"
-```
+**Output shape:** `{ "updated": 8 }`
 
 ---
 
@@ -525,29 +530,21 @@ List all note types with their note counts.
 ```json
 [
   { "name": "Basic", "notes": 150 },
-  { "name": "Basic (and reversed card)", "notes": 30 },
   { "name": "Cloze", "notes": 45 }
 ]
-```
-
-```bash
-anki-ai notetypes list
 ```
 
 ---
 
 ### `anki-ai notetypes fields NAME`
 
-List the field names of a note type. Use this to know which `--field` names to pass to `notes add`.
+List the field names of a note type. Use before `notes add` to know which `--field` names to pass.
 
-**Output shape:**
-```json
-["Front", "Back"]
-```
+**Output shape:** `["Front", "Back"]`
 
 ```bash
 anki-ai notetypes fields "Basic"
-anki-ai notetypes fields "Cloze"
+anki-ai notetypes fields "Cloze"    # ["Text", "Back Extra"]
 ```
 
 ---
@@ -556,94 +553,81 @@ anki-ai notetypes fields "Cloze"
 
 ### `anki-ai media upload FILE [FILE ...]`
 
-Copy one or more local files into the collection's media folder (`collection.media/`).
-Returns the stored filename for each file.
+Copy local files into the collection media folder. Returns the stored filename for each file.
 
-- **Images:** `<img src="filename.jpg">`
-- **Audio:** `[sound:filename.mp3]`
+Reference in note fields as: `<img src="file.jpg">` or `[sound:file.mp3]`
 
-Media is included in `anki-ai sync` by default.
-
-**Output shape:**
-```json
-[{ "filename": "bark.mp3" }]
-```
+**Output shape:** `[{ "filename": "bark.mp3" }]`
 
 ```bash
 anki-ai media upload /path/to/bark.mp3
-anki-ai media upload photo.jpg audio.mp3
-
-# Full workflow:
-anki-ai media upload /tmp/bark.mp3
-anki-ai notes add --deck "Animals" \
-  --field Front="What sound does a dog make?" \
-  --field Back="[sound:bark.mp3]"
-anki-ai sync
 ```
 
 ---
 
 ## Typical Workflows
 
-### Initial setup (once)
+### Safe session pattern (always use this)
 ```bash
-# Via flags:
-anki-ai auth login --email user@example.com --password s3cr3t
+anki-ai sync               # pull latest state
+anki-ai snapshot           # checkpoint before any writes
+# ... do work ...
+anki-ai sync               # push changes to AnkiWeb
+```
 
-# Or via env vars (CI / containers):
-ANKI_EMAIL=user@example.com ANKI_PASSWORD=s3cr3t anki-ai auth login
+### Undo a mistake
+```bash
+anki-ai restore --last --yes   # revert to last snapshot
+anki-ai sync                   # push rollback to AnkiWeb
+```
 
+### Restructure deck hierarchy
+```bash
+anki-ai sync
+anki-ai snapshot
+anki-ai decks reparent "N5" --parent "Japanese"
+anki-ai decks reparent "N4" --parent "Japanese"
+anki-ai decks list            # verify
 anki-ai sync
 ```
 
-### Add Basic cards (agent session)
+### Bulk field fix with find-replace
 ```bash
-anki-ai sync                                        # pull latest from phone
-anki-ai snapshot                                    # safety checkpoint
-anki-ai decks list                                  # check deck names
-anki-ai notetypes fields "Basic"                    # fields: Front, Back
+anki-ai sync
+anki-ai snapshot
+anki-ai notes find-replace "(?i)colour" "color" --field Back -q "deck:English"
+anki-ai notes search "color" -q "deck:English"   # verify
+anki-ai sync
+```
+
+### Move notes between decks
+```bash
+anki-ai notes search "deck:Japanese tag:n5" | jq '.[].id'
+anki-ai notes move --deck "Japanese::N5" 1715001234567 1715001234568
+anki-ai decks list            # verify due counts updated
+```
+
+### Add Basic cards
+```bash
+anki-ai sync
+anki-ai snapshot
+anki-ai notetypes fields "Basic"                  # confirm field names
 anki-ai notes add --deck "Spanish" --field Front="rendir" --field Back="to yield"
-anki-ai sync                                        # push new card to AnkiWeb
-anki-ai notes search "rendir"                       # verify
+anki-ai sync
+anki-ai notes search "rendir"                     # verify
 ```
 
-### Add Cloze cards (agent session)
-Use Cloze when the fact lives inside a sentence and context helps recall.
-Each `{{cN::answer}}` group produces one card; multiple groups in one note = multiple cards.
+### Set study limits
 ```bash
-anki-ai sync
-anki-ai snapshot
-anki-ai notetypes fields "Cloze"                    # fields: Text, Back Extra
-anki-ai notes add --deck "Biology" --type "Cloze" \
-  --field Text="The {{c1::mitochondria}} produces {{c2::ATP}} via oxidative phosphorylation."
-anki-ai notes add --deck "History" --type "Cloze" \
-  --field Text="{{c1::World War II}} ended in {{c2::1945}}." \
-  --field "Back Extra"="VE Day: May 8; VJ Day: Sep 2"
-anki-ai sync
-anki-ai notes search "deck:Biology note:Cloze"      # verify
-```
-
-### Bulk tag operation
-```bash
-anki-ai sync
-anki-ai snapshot
-anki-ai tags add verb -q "deck:Spanish"
-anki-ai sync
-```
-
-### Suspend low-quality cards
-```bash
-anki-ai cards list "deck:Spanish tag:low-quality" | jq '.[].id'
-anki-ai cards suspend 1715001234568 1715001234569
-anki-ai sync
+anki-ai decks config get "Japanese"               # see current limits
+anki-ai decks config set "Japanese" --new-per-day 10 --reviews-per-day 150
 ```
 
 ---
 
 ## Error Handling
 
-- Non-zero exit code on any error.
-- Error message on stderr.
+- Non-zero exit code on any error. Error message on stderr.
 
 | Error message | Cause and fix |
 |---|---|
@@ -651,7 +635,7 @@ anki-ai sync
 | `Deck 'Name' not found.` | Use `anki-ai decks list` to check exact name |
 | `Note type 'Name' not found.` | Use `anki-ai notetypes list` to check exact name |
 | `Field 'Name' not found in note type 'Type'.` | Use `anki-ai notetypes fields <type>` |
-| `auth file not found: …` | Run `anki-ai auth login` first |
+| `No snapshots found.` | Run `anki-ai snapshot` first before using `restore --last` |
 
 ---
 
@@ -660,6 +644,6 @@ anki-ai sync
 | Variable | Default | Description |
 |---|---|---|
 | `ANKI_COLLECTION_PATH` | Auto-detected from `~/.local/share/Anki2/` | Absolute path to `collection.anki2` |
-| `ANKI_AUTH_PATH` | `~/.config/anki-ai/auth.json` | Path to auth token file (useful for isolated environments) |
+| `ANKI_AUTH_PATH` | `~/.config/anki-ai/auth.json` | Path to auth token file |
 | `ANKI_EMAIL` | — | AnkiWeb email for `auth login` (overridden by `--email` flag) |
 | `ANKI_PASSWORD` | — | AnkiWeb password for `auth login` (overridden by `--password` flag) |
