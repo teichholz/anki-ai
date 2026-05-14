@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anki::card::CardId;
 use anki::notes::Note;
 use anki::notes::NoteId;
 use anyhow::anyhow;
@@ -128,6 +129,53 @@ pub fn update_note(
         .get_note(NoteId(note_id))?
         .ok_or_else(|| anyhow!("Note {note_id} not found after update."))?;
     note_to_info(col, &updated)
+}
+
+/// Move all cards belonging to the given notes to a different deck.
+/// Returns the number of cards moved (one note may have multiple cards).
+pub fn move_notes_to_deck(
+    col: &mut CollectionHandle,
+    note_ids: &[i64],
+    deck_name: &str,
+) -> anyhow::Result<usize> {
+    let deck_id = col
+        .get_deck_id(deck_name)?
+        .ok_or_else(|| anyhow!("Deck '{}' not found.", deck_name))?;
+
+    // Collect all card IDs for the given notes via search.
+    let mut card_ids: Vec<CardId> = Vec::new();
+    for &nid in note_ids {
+        let query = format!("nid:{nid}");
+        let cids = col.search_cards(&query, anki::search::SortMode::NoOrder)?;
+        if cids.is_empty() {
+            return Err(anyhow!("Note {nid} not found."));
+        }
+        card_ids.extend(cids);
+    }
+
+    let count = col.set_deck(&card_ids, deck_id)?.output;
+    Ok(count)
+}
+
+/// Bulk regex find/replace across note fields.
+/// `query` selects which notes to operate on (Anki search syntax; empty = all notes).
+/// `field_name` restricts replacement to one field; `None` targets all fields.
+/// Returns the number of notes modified.
+pub fn find_replace(
+    col: &mut CollectionHandle,
+    query: &str,
+    search_re: &str,
+    replacement: &str,
+    field_name: Option<String>,
+) -> anyhow::Result<usize> {
+    let nids = col.search_notes_unordered(query)?;
+    if nids.is_empty() {
+        return Ok(0);
+    }
+    let count = col
+        .find_and_replace(nids, search_re, replacement, field_name)?
+        .output;
+    Ok(count)
 }
 
 pub fn search_notes(col: &mut CollectionHandle, query: &str) -> anyhow::Result<Vec<NoteInfo>> {
@@ -304,5 +352,77 @@ mod tests {
         let (_dir, mut col) = setup();
         let err = delete_note(&mut col, 999999999).unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_move_notes_to_deck() {
+        let (_dir, mut col) = setup();
+        crate::decks::create_deck(&mut col, "Target").unwrap();
+        let mut fields = HashMap::new();
+        fields.insert("Front".to_string(), "MoveMe".to_string());
+        fields.insert("Back".to_string(), "Back".to_string());
+        let id = add_note(&mut col, "Default", "Basic", &fields).unwrap();
+
+        let moved = move_notes_to_deck(&mut col, &[id], "Target").unwrap();
+        assert!(moved > 0);
+
+        // Verify the note's card is now in Target
+        let cards = col
+            .search_cards(&format!("nid:{id} deck:Target"), anki::search::SortMode::NoOrder)
+            .unwrap();
+        assert!(!cards.is_empty(), "card should be in Target deck");
+    }
+
+    #[test]
+    fn test_move_notes_to_nonexistent_deck_errors() {
+        let (_dir, mut col) = setup();
+        let mut fields = HashMap::new();
+        fields.insert("Front".to_string(), "F".to_string());
+        fields.insert("Back".to_string(), "B".to_string());
+        let id = add_note(&mut col, "Default", "Basic", &fields).unwrap();
+        let err = move_notes_to_deck(&mut col, &[id], "NoSuchDeck").unwrap_err();
+        assert!(err.to_string().contains("NoSuchDeck"));
+    }
+
+    #[test]
+    fn test_find_replace_all_fields() {
+        let (_dir, mut col) = setup();
+        let mut fields = HashMap::new();
+        fields.insert("Front".to_string(), "colour".to_string());
+        fields.insert("Back".to_string(), "favourite colour".to_string());
+        add_note(&mut col, "Default", "Basic", &fields).unwrap();
+
+        let updated = find_replace(&mut col, "colour", "colour", "color", None).unwrap();
+        assert_eq!(updated, 1);
+
+        let results = search_notes(&mut col, "color").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].fields["Front"], "color");
+        assert_eq!(results[0].fields["Back"], "favourite color");
+    }
+
+    #[test]
+    fn test_find_replace_specific_field() {
+        let (_dir, mut col) = setup();
+        let mut fields = HashMap::new();
+        fields.insert("Front".to_string(), "hello".to_string());
+        fields.insert("Back".to_string(), "hello".to_string());
+        add_note(&mut col, "Default", "Basic", &fields).unwrap();
+
+        let updated =
+            find_replace(&mut col, "hello", "hello", "world", Some("Front".to_string())).unwrap();
+        assert_eq!(updated, 1);
+
+        let results = search_notes(&mut col, "world").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].fields["Front"], "world");
+        assert_eq!(results[0].fields["Back"], "hello");
+    }
+
+    #[test]
+    fn test_find_replace_no_matches_returns_zero() {
+        let (_dir, mut col) = setup();
+        let count = find_replace(&mut col, "", "zzz_no_match", "x", None).unwrap();
+        assert_eq!(count, 0);
     }
 }

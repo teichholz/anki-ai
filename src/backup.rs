@@ -152,6 +152,16 @@ pub fn list_snapshots(collection_path: &Path) -> Result<Vec<SnapshotInfo>> {
         .collect()
 }
 
+/// Return the path of the most-recent snapshot, or an error if none exist.
+pub fn latest_snapshot(collection_path: &Path) -> Result<PathBuf> {
+    let snaps = list_snapshots(collection_path)?;
+    snaps
+        .into_iter()
+        .next()
+        .map(|s| PathBuf::from(s.path))
+        .ok_or_else(|| anyhow::anyhow!("No snapshots found."))
+}
+
 pub fn restore_snapshot(collection_path: &Path, snapshot: &str) -> Result<PathBuf> {
     let snap_dir = snapshots_dir(collection_path);
 
@@ -371,5 +381,32 @@ mod tests {
         let col = make_collection(&dir);
         let result = restore_snapshot(&col, "snapshot-9999-01-01-00.00.00.anki2");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_latest_snapshot_returns_newest() {
+        let dir = TempDir::new().unwrap();
+        let col = make_collection(&dir);
+        let snap_dir = dir.path().join("snapshots");
+        fs::create_dir_all(&snap_dir).unwrap();
+
+        fs::write(snap_dir.join("snapshot-2024-01-01-10.00.00.anki2"), b"old").unwrap();
+        fs::write(snap_dir.join("snapshot-2024-01-03-10.00.00.anki2"), b"new").unwrap();
+        fs::write(snap_dir.join("snapshot-2024-01-02-10.00.00.anki2"), b"mid").unwrap();
+
+        let latest = latest_snapshot(&col).unwrap();
+        assert!(
+            latest.to_string_lossy().contains("2024-01-03"),
+            "expected newest snapshot, got: {}",
+            latest.display()
+        );
+    }
+
+    #[test]
+    fn test_latest_snapshot_no_snapshots_errors() {
+        let dir = TempDir::new().unwrap();
+        let col = make_collection(&dir);
+        let err = latest_snapshot(&col).unwrap_err();
+        assert!(err.to_string().contains("No snapshots"));
     }
 }

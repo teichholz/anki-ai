@@ -74,14 +74,21 @@ Prompts for your AnkiWeb email and password, stores the auth token at `~/.config
 | `snapshot` | Create a timestamped backup of the collection file |
 | `snapshots` | List available snapshots |
 | `restore SNAPSHOT` | Restore collection from a snapshot (`--yes` to skip prompt) |
+| `restore --last` | Restore from the most recent snapshot (agent undo shorthand) |
 | `decks list` | List all decks with due card counts |
 | `decks create NAME` | Create a deck (supports `::` for nested decks) |
 | `decks delete NAME` | Delete a deck and all its cards (`--yes` to skip prompt) |
+| `decks rename OLD NEW` | Rename a deck (child decks follow automatically) |
+| `decks reparent DECK [--parent PARENT\|--root]` | Move a deck to a different parent |
+| `decks config get NAME` | Show study limits (new/day, reviews/day) for a deck |
+| `decks config set NAME [--new-per-day N] [--reviews-per-day N]` | Update study limits |
 | `notes add` | Add a note (`--deck NAME --field Front=X --field Back=Y`) |
 | `notes get ID` | Get a note by ID |
 | `notes search QUERY` | Search notes using Anki search syntax |
 | `notes update ID` | Update note fields (`--field Name=Value`) |
 | `notes delete ID` | Delete a note by ID (`--yes` to skip prompt) |
+| `notes move --deck NAME ID...` | Move notes to a different deck |
+| `notes find-replace PATTERN REPL [--field F] [-q QUERY]` | Bulk regex find/replace across fields |
 | `cards list QUERY` | Find card IDs matching a search query |
 | `cards info ID` | Show scheduling info for a card |
 | `cards suspend ID...` | Suspend one or more cards |

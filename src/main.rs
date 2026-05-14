@@ -1,6 +1,7 @@
 mod backup;
 mod cards;
 mod collection;
+mod deckconfig;
 mod decks;
 mod media;
 mod notes;
@@ -15,12 +16,14 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
-use crate::backup::{create_snapshot, list_snapshots, restore_snapshot};
+use crate::backup::{create_snapshot, latest_snapshot, list_snapshots, restore_snapshot};
 use crate::cards::{find_cards, get_card_info, suspend_cards, unsuspend_cards};
 use crate::collection::{get_collection_path, open_collection};
-use crate::decks::{create_deck, delete_deck, list_decks};
+use crate::deckconfig::{get_deck_config, set_deck_config};
+use crate::decks::{create_deck, delete_deck, list_decks, rename_deck, reparent_deck};
 use crate::media::add_media_file;
-use crate::notes::{add_note, delete_note, get_note, search_notes, update_note};
+use crate::notes::{add_note, delete_note, find_replace, get_note, move_notes_to_deck,
+    search_notes, update_note};
 use crate::notetypes::{get_notetype_fields, list_notetypes};
 use crate::sync::{run_sync, save_hkey};
 use crate::tags::{bulk_add_tags, bulk_remove_tags, list_tags, rename_tag};
@@ -62,8 +65,11 @@ enum Commands {
     Snapshots,
     /// Restore the collection from a snapshot.
     Restore {
-        /// Snapshot filename or full path.
-        snapshot: String,
+        /// Snapshot filename or full path. Omit when using --last.
+        snapshot: Option<String>,
+        /// Restore from the most recent snapshot.
+        #[arg(long)]
+        last: bool,
         /// Skip confirmation prompt.
         #[arg(short, long)]
         yes: bool,
@@ -138,6 +144,49 @@ enum DecksCmd {
         #[arg(short, long)]
         yes: bool,
     },
+    /// Rename a deck (child decks follow automatically).
+    Rename {
+        /// Current deck name.
+        old: String,
+        /// New deck name.
+        new: String,
+    },
+    /// Move a deck under a different parent (keeps leaf name; child decks follow).
+    Reparent {
+        /// Deck to move.
+        deck: String,
+        /// New parent deck name. Omit to promote to top level.
+        #[arg(long)]
+        parent: Option<String>,
+        /// Promote to top level (mutually exclusive with --parent).
+        #[arg(long, conflicts_with = "parent")]
+        root: bool,
+    },
+    /// Deck study-limit configuration.
+    Config {
+        #[command(subcommand)]
+        cmd: DeckConfigCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum DeckConfigCmd {
+    /// Show study limits for a deck.
+    Get {
+        /// Deck name.
+        name: String,
+    },
+    /// Update study limits for a deck.
+    Set {
+        /// Deck name.
+        name: String,
+        /// New cards per day.
+        #[arg(long)]
+        new_per_day: Option<u32>,
+        /// Review cards per day.
+        #[arg(long)]
+        reviews_per_day: Option<u32>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -179,6 +228,28 @@ enum NotesCmd {
         /// Skip confirmation prompt.
         #[arg(short, long)]
         yes: bool,
+    },
+    /// Move notes to a different deck.
+    Move {
+        /// Target deck name.
+        #[arg(long)]
+        deck: String,
+        /// Note IDs to move.
+        #[arg(required = true)]
+        note_ids: Vec<i64>,
+    },
+    /// Bulk regex find/replace across note fields.
+    FindReplace {
+        /// Regex pattern to search for.
+        pattern: String,
+        /// Replacement string.
+        replacement: String,
+        /// Restrict to a specific field name (default: all fields).
+        #[arg(long)]
+        field: Option<String>,
+        /// Anki search query to scope notes (default: all notes).
+        #[arg(long, short = 'q', default_value = "")]
+        query: String,
     },
 }
 
@@ -365,18 +436,23 @@ async fn run() -> Result<()> {
         // -------------------------------------------------------------------
         // restore
         // -------------------------------------------------------------------
-        Commands::Restore { snapshot, yes } => {
+        Commands::Restore { snapshot, last, yes } => {
+            let col_path = get_collection_path()?;
+            let snap_name: String = if last {
+                latest_snapshot(&col_path)?.to_string_lossy().into_owned()
+            } else {
+                snapshot.ok_or_else(|| anyhow!("Provide a snapshot name or use --last."))?
+            };
             if !yes {
                 let ok = confirm(&format!(
-                    "Restore from '{snapshot}'? The current collection will be overwritten."
+                    "Restore from '{snap_name}'? The current collection will be overwritten."
                 ))?;
                 if !ok {
                     println!("Aborted.");
                     return Ok(());
                 }
             }
-            let col_path = get_collection_path()?;
-            let path = restore_snapshot(&col_path, &snapshot)?;
+            let path = restore_snapshot(&col_path, &snap_name)?;
             println!("Restored from '{}'.", path.display());
         }
 
@@ -422,6 +498,32 @@ async fn run() -> Result<()> {
                 delete_deck(&mut col, &name)?;
                 println!("Deleted deck '{name}'.");
             }
+            DecksCmd::Rename { old, new } => {
+                let mut col = open_collection(None)?;
+                let deck = rename_deck(&mut col, &old, &new)?;
+                println!("{}", serde_json::to_string_pretty(&deck)?);
+            }
+            DecksCmd::Reparent { deck, parent, root: _ } => {
+                let mut col = open_collection(None)?;
+                let info = reparent_deck(&mut col, &deck, parent.as_deref())?;
+                println!("{}", serde_json::to_string_pretty(&info)?);
+            }
+            DecksCmd::Config { cmd } => match cmd {
+                DeckConfigCmd::Get { name } => {
+                    let mut col = open_collection(None)?;
+                    let info = get_deck_config(&mut col, &name)?;
+                    println!("{}", serde_json::to_string_pretty(&info)?);
+                }
+                DeckConfigCmd::Set {
+                    name,
+                    new_per_day,
+                    reviews_per_day,
+                } => {
+                    let mut col = open_collection(None)?;
+                    let info = set_deck_config(&mut col, &name, new_per_day, reviews_per_day)?;
+                    println!("{}", serde_json::to_string_pretty(&info)?);
+                }
+            },
         },
 
         // -------------------------------------------------------------------
@@ -476,6 +578,27 @@ async fn run() -> Result<()> {
                 let mut col = open_collection(None)?;
                 delete_note(&mut col, note_id)?;
                 println!("Deleted note {note_id}.");
+            }
+            NotesCmd::Move { deck, note_ids } => {
+                let mut col = open_collection(None)?;
+                let moved = move_notes_to_deck(&mut col, &note_ids, &deck)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({ "moved": moved }))?
+                );
+            }
+            NotesCmd::FindReplace {
+                pattern,
+                replacement,
+                field,
+                query,
+            } => {
+                let mut col = open_collection(None)?;
+                let updated = find_replace(&mut col, &query, &pattern, &replacement, field)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({ "updated": updated }))?
+                );
             }
         },
 
