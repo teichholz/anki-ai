@@ -24,7 +24,7 @@ use crate::decks::{create_deck, delete_deck, list_decks, rename_deck, reparent_d
 use crate::media::add_media_file;
 use crate::notes::{add_note, delete_note, find_replace, get_note, move_notes_to_deck,
     search_notes, update_note};
-use crate::notetypes::{get_notetype_fields, list_notetypes};
+use crate::notetypes::{add_notetype_field, get_notetype_fields, list_notetypes};
 use crate::sync::{run_sync, save_hkey};
 use crate::tags::{bulk_add_tags, bulk_remove_tags, list_tags, rename_tag};
 
@@ -318,6 +318,13 @@ enum NotetypesCmd {
     Fields {
         /// Note type name.
         name: String,
+    },
+    /// Add a field to a note type.
+    AddField {
+        /// Note type name.
+        name: String,
+        /// Field name to add.
+        field: String,
     },
 }
 
@@ -683,6 +690,16 @@ async fn run() -> Result<()> {
                 let mut col = open_collection(None)?;
                 let field_names = get_notetype_fields(&mut col, &name)?;
                 println!("{}", serde_json::to_string_pretty(&field_names)?);
+            }
+            NotetypesCmd::AddField { name, field } => {
+                let mut col = open_collection(None)?;
+                add_notetype_field(&mut col, &name, &field)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &serde_json::json!({ "notetype": name, "field_added": field })
+                    )?
+                );
             }
         },
 

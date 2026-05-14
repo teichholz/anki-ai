@@ -1,3 +1,4 @@
+use anki::notetype::NoteField;
 use anki::services::NotetypesService;
 use serde::Serialize;
 
@@ -24,6 +25,24 @@ pub fn list_notetypes(col: &mut CollectionHandle) -> anyhow::Result<Vec<Notetype
         })
         .collect();
     Ok(infos)
+}
+
+/// Add a new field to the notetype with the given name.
+///
+/// Returns `Err` if no notetype with that name exists or the update fails.
+pub fn add_notetype_field(
+    col: &mut CollectionHandle,
+    notetype_name: &str,
+    field_name: &str,
+) -> anyhow::Result<()> {
+    let arc_nt = col
+        .get_notetype_by_name(notetype_name)?
+        .ok_or_else(|| anyhow::anyhow!("Note type '{}' not found.", notetype_name))?;
+    let mut nt = (*arc_nt).clone();
+
+    nt.fields.push(NoteField::new(field_name));
+    col.update_notetype(&mut nt, false)?;
+    Ok(())
 }
 
 /// Return the ordered list of field names for the notetype with the given name.
@@ -74,6 +93,27 @@ mod tests {
         assert!(
             fields.contains(&"Back".to_string()),
             "Expected 'Back' field, got: {fields:?}"
+        );
+    }
+
+    #[test]
+    fn test_add_notetype_field_appends_field() {
+        let (_dir, mut col) = setup();
+        add_notetype_field(&mut col, "Basic", "Extra").unwrap();
+        let fields = get_notetype_fields(&mut col, "Basic").unwrap();
+        assert!(
+            fields.contains(&"Extra".to_string()),
+            "Expected 'Extra' field after add, got: {fields:?}"
+        );
+    }
+
+    #[test]
+    fn test_add_notetype_field_not_found() {
+        let (_dir, mut col) = setup();
+        let err = add_notetype_field(&mut col, "NonExistentNotetype", "Extra").unwrap_err();
+        assert!(
+            err.to_string().contains("not found"),
+            "Expected 'not found' error, got: {err}"
         );
     }
 
